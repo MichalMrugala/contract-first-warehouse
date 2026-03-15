@@ -38,9 +38,13 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 ## Week 1 Results
 
 - **Dataset:** nrg_bal_c (Eurostat Complete Energy Balances)
-- **Total rows:** _[update after loading]_
-- **Quality issues found:** _[update after running checks]_
-- **Overall quality score:** _[update after running checks]_
+- **Total rows:** 39,486,867
+- **Countries:** 41 (40 individual + 1 EU aggregate)
+- **Energy products:** 72
+- **Balance items:** 142
+- **Time range:** 1990–2024 (35 years)
+- **Quality checks:** 9 rules tested — 100% structural pass rate
+- **Key finding:** 46.14% of observations have NULL values (flagged as 'm' by Eurostat — missing by design, not by error)
 - **Data contract:** [`contracts/energy_balance_raw.yaml`](contracts/energy_balance_raw.yaml)
 - **Quality report:** [`docs/quality-report-week1.md`](docs/quality-report-week1.md)
 
