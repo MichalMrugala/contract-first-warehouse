@@ -1,0 +1,36 @@
+# Raw data (too large for git, download from Eurostat)
+raw/*.csv
+raw/*.csv.gz
+raw/*.tsv
+raw/*.tsv.gz
+
+# DuckDB database files
+*.duckdb
+*.duckdb.wal
+
+# Power BI files (binary, not diffable)
+powerbi/*.pbix
+powerbi/*.pbit
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Temporary files
+*.tmp
+*.bak
+*.log
