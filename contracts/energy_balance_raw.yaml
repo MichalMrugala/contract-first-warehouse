@@ -1,0 +1,237 @@
+dataContractSpecification: 1.1.0
+id: contract-first-energy-raw-v1
+info:
+  title: EU Energy Balance Raw Data
+  version: 0.1.0
+  status: draft
+  description: >
+    Raw Eurostat energy balance data (nrg_bal_c) before staging transformations.
+    This contract defines the expected schema, quality rules, and governance
+    metadata for the source layer of the Contract First data warehouse.
+    Every transformation in the staging layer must trace back to a rule here.
+  owner: Michal Mrugala
+  contact:
+    name: Michal Mrugala
+    url: https://architecture-first.beehiiv.com
+
+servers:
+  local:
+    type: local
+    path: warehouse.duckdb
+    format: duckdb
+
+terms:
+  usage: >
+    Analytics and reporting on EU energy consumption patterns.
+    Educational project — Contract First build-in-public series.
+  limitations: >
+    Source data must be attributed to Eurostat.
+    No redistribution without proper attribution.
+  billing: Free (Eurostat open data)
+  noticePeriod: N/A
+
+models:
+  raw_energy:
+    description: >
+      Raw energy balance data as loaded from Eurostat SDMX-CSV export.
+      One row = one observation (country + balance item + energy product + unit + year).
+    fields:
+      DATAFLOW:
+        type: string
+        required: false
+        description: >
+          SDMX metadata field identifying the dataflow.
+          Not part of the analytical model — drop in staging.
+      LAST UPDATE:
+        type: string
+        required: false
+        description: >
+          SDMX metadata field showing when Eurostat last updated this record.
+          Not part of the analytical model — drop in staging.
+      freq:
+        type: string
+        required: true
+        description: >
+          Frequency of observation. Should always be 'A' (annual) for this dataset.
+        enum:
+          - A
+      nrg_bal:
+        type: string
+        required: true
+        description: >
+          Energy balance item code. Defines what aspect of the energy balance
+          this row measures (e.g., NRGSUP = total energy supply,
+          PPRD = primary production, IMP = imports, EXP = exports).
+        examples:
+          - NRGSUP
+          - PPRD
+          - IMP
+          - EXP
+          - GIC
+          - GFC
+          - FC_E
+      siec:
+        type: string
+        required: true
+        description: >
+          Standard International Energy Product Classification code.
+          Identifies the energy product (e.g., TOTAL = all products,
+          SOLID_FF = solid fossil fuels, O4000XBIO = oil and petroleum,
+          RA000 = renewables and biofuels).
+        examples:
+          - TOTAL
+          - SOLID_FF
+          - O4000XBIO
+          - G3000
+          - RA000
+          - N9000
+          - E7000
+      unit:
+        type: string
+        required: true
+        description: >
+          Unit of measurement for the observation value.
+          TJ = terajoules, KTOE = kilotonnes of oil equivalent, GWH = gigawatt hours.
+        enum:
+          - TJ
+          - KTOE
+          - GWH
+      geo:
+        type: string
+        required: true
+        description: >
+          Country or geographic aggregate code.
+          ISO 3166-1 alpha-2 for individual countries (DE, FR, PL).
+          Eurostat aggregate codes for groups (EU27_2020, EA20).
+        minLength: 2
+        maxLength: 10
+      TIME_PERIOD:
+        type: integer
+        required: true
+        description: >
+          Year of observation. Annual data from 1990 to present.
+        minimum: 1990
+        maximum: 2024
+      OBS_VALUE:
+        type: number
+        required: false
+        description: >
+          Observed value in the specified unit. Can be NULL when data
+          is unavailable, confidential, or not applicable.
+          Negative values ARE valid for certain balance items
+          (exports, stock changes, statistical differences).
+      OBS_FLAG:
+        type: string
+        required: false
+        description: >
+          Observation status flag from Eurostat.
+          Common flags: p = provisional, e = estimated, c = confidential,
+          n = not significant, d = definition differs, u = low reliability.
+          NULL means no flag (normal/validated observation).
+        enum:
+          - p
+          - e
+          - c
+          - n
+          - d
+          - u
+          - z
+          - null
+
+quality:
+  type: custom-sql
+  description: >
+    Quality rules derived from data exploration (Week 1).
+    Each rule maps to a SQL check in sql/quality/02_quality_checks.sql.
+    Rules are tested BEFORE any staging transformation runs.
+  specification:
+    rules:
+      - name: no_null_geo
+        description: >
+          Country code must never be NULL. A row without a geo code
+          cannot be attributed to any geography and is useless for
+          dimensional analysis.
+        sql_check: COUNT(*) FILTER (WHERE geo IS NULL) = 0
+        severity: critical
+
+      - name: valid_year_range
+        description: >
+          TIME_PERIOD must be between 1990 and 2024. Values outside
+          this range indicate data loading errors or future projections
+          that should not be in the historical dataset.
+        sql_check: COUNT(*) FILTER (WHERE TIME_PERIOD < 1990 OR TIME_PERIOD > 2024) = 0
+        severity: critical
+
+      - name: no_null_nrg_bal
+        description: >
+          Balance item code must never be NULL. Without it, we don't
+          know what aspect of the energy balance this row measures.
+        sql_check: COUNT(*) FILTER (WHERE nrg_bal IS NULL) = 0
+        severity: critical
+
+      - name: no_null_unit
+        description: >
+          Unit of measurement must never be NULL. Without it, the
+          OBS_VALUE is meaningless — 1000 TJ and 1000 GWH are
+          completely different quantities.
+        sql_check: COUNT(*) FILTER (WHERE unit IS NULL) = 0
+        severity: critical
+
+      - name: valid_units_only
+        description: >
+          Unit must be one of the expected values: TJ, KTOE, GWH.
+          Unknown units indicate data format changes or loading errors.
+        sql_check: COUNT(*) FILTER (WHERE unit NOT IN ('TJ', 'KTOE', 'GWH')) = 0
+        severity: warning
+
+      - name: annual_frequency_only
+        description: >
+          Frequency must be 'A' (annual). This dataset should not
+          contain monthly or quarterly data. Mixed frequencies would
+          break aggregation logic.
+        sql_check: COUNT(*) FILTER (WHERE freq != 'A') = 0
+        severity: warning
+
+      - name: no_duplicate_keys
+        description: >
+          The natural key (geo + nrg_bal + siec + unit + TIME_PERIOD)
+          must be unique. Duplicates cause double-counting in the fact table.
+        severity: critical
+
+      - name: row_count_minimum
+        description: >
+          Dataset must have at least 100,000 rows. Significantly fewer
+          indicates a truncated download or wrong dataset version.
+        sql_check: COUNT(*) >= 100000
+        severity: critical
+
+      - name: geo_code_length
+        description: >
+          Country codes should be 2 characters (ISO) or recognized
+          aggregate codes. Codes longer than 10 characters are suspicious.
+        sql_check: COUNT(*) FILTER (WHERE LENGTH(geo) > 10) = 0
+        severity: warning
+
+links:
+  source_dataset: https://ec.europa.eu/eurostat/databrowser/view/nrg_bal_c/default/table?lang=en
+  source_api: https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_bal_c/?format=SDMX-CSV&compressed=true
+  specification: https://github.com/datacontract/datacontract-specification
+
+x_legal_basis:
+  gdpr_applicable: false
+  reason: >
+    No personal data. Public statistical data published by Eurostat
+    under the European Commission's open data policy. No individual-level
+    data, no pseudonymized identifiers, no behavioral data.
+    All observations are national-level aggregates.
+  license: CC BY 4.0 Eurostat
+  data_protection_impact_assessment_required: false
+  processing_record_required: false
+  retention_policy: >
+    Data retained for the duration of the project and educational purposes.
+    Source data freely re-downloadable from Eurostat at any time.
+  note_for_week_7: >
+    This field was planted in Week 1 intentionally. In Week 7, we add
+    the full governance layer — GDPR Article 30 records, data lineage,
+    and retention documentation. Having the legal basis defined from
+    Day 1 shows that governance is not an afterthought.
