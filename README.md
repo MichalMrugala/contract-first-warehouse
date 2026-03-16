@@ -1,7 +1,7 @@
 # Contract First
 
 **Building a governed star schema data warehouse from EU energy data in 8 weekends. Data contracts first. SQL first. Model second. DAX last.**
-![Architecture Diagram](docs/IMG_0357.jpg
+![Architecture Diagram](docs/IMG_0357.jpg)
 A public build-in-public project by [Michał Mrugała](https://www.linkedin.com/in/michal-mrugala02/) — law student, data engineering intern at ArcelorMittal, and creator of the [Architecture First](https://architecture-first.beehiiv.com) newsletter.
 
 ## What is this?
