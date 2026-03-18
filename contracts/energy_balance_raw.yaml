@@ -121,16 +121,13 @@ models:
           Negative values ARE valid for certain balance items
           (exports, stock changes, statistical differences).
       OBS_FLAG:
-      CONF_STATUS:
         type: string
         required: false
         description: >
-          Confidentiality status flag from SDMX format.
-          Discovered during Week 1 exploration - not in original spec.
-          Indicates whether the observation value is confidential.
-          Common values: F = free, N = not publishable, C = confidential.
-          This column was not anticipated in the initial contract
-          and was added after data profiling revealed its presence.
+          Observation status flag from Eurostat.
+          Common flags: p = provisional, e = estimated, c = confidential,
+          n = not significant, d = definition differs, u = low reliability.
+          NULL means no flag (normal/validated observation).
         enum:
           - p
           - e
@@ -140,6 +137,17 @@ models:
           - u
           - z
           - null
+      CONF_STATUS:
+        type: string
+        required: false
+        description: >
+          Confidentiality status flag from SDMX format.
+          Discovered during Week 1 exploration - not in original spec.
+          Indicates whether the observation value is confidential.
+          Common values: F = free, N = not publishable, C = confidential.
+```
+
+Commit message: `Fix OBS_FLAG definition and CONF_STATUS enum values`
 
 quality:
   type: custom-sql
