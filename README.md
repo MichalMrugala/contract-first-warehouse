@@ -27,7 +27,7 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 | Week | Layer | What I'm Building |
 |------|-------|-------------------|
 | 1 ✅ | Contract + Raw | Data contract, exploration, quality checks, staging views |
-| 2 | Staging | Complete staging layer + automated quality gates |
+| 2 ✅ | Quality Gates | Automated quality gates, completeness analysis, 3-tier staging |
 | 3 | Model | Star schema design + dimension tables |
 | 4 | DAX Trap | Connect Power BI, kill unnecessary DAX measures |
 | 5 | Quality | SQL-based quality tests before data touches Power BI |
@@ -37,16 +37,23 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 
 ## Week 1 Results
 
-- **Dataset:** nrg_bal_c (Eurostat Complete Energy Balances)
-- **Total rows:** 39,486,867
+- **Total rows loaded:** 39,486,867
 - **Countries:** 41 (40 individual + 1 EU aggregate)
-- **Energy products:** 72
-- **Balance items:** 142
-- **Time range:** 1990–2024 (35 years)
-- **Quality checks:** 9 rules tested — 100% structural pass rate
-- **Key finding:** 46.14% of observations have NULL values (flagged as 'm' by Eurostat — missing by design, not by error)
-- **Data contract:** [`contracts/energy_balance_raw.yaml`](contracts/energy_balance_raw.yaml)
-- **Quality report:** [`docs/quality-report-week1.md`](docs/quality-report-week1.md)
+- **Quality checks:** 9 rules — 100% structural pass rate
+- **Key finding:** 46.14% of observations have NULL values (Eurostat flag 'm' = missing by design)
+- **Reports:** [`docs/quality-report-week1.md`](docs/quality-report-week1.md)
+
+## Week 2 Results
+
+- **Automated quality gates:** 12 rules running in 2 seconds on 39.5M rows
+- **Structural checks:** 8/8 PASS | Consistency: 1/1 PASS
+- **Key finding:** Missing data is structural, not random — every country has identical 53.2% completeness. Root cause: sparse energy product categories (RA100 = 9.36% complete vs TOTAL = 100%)
+- **The 88% trap:** Counting rows without filtering NULLs overestimates observations by 88%
+- **Unit trap:** Every observation exists in 3 copies (TJ, KTOE, GWH) — dataset is 3x larger than necessary
+- **3-tier staging:** 21.3M clean + 18.2M missing + 0 rejected = 39.5M (every row accounted for)
+- **Fact table preview:** 6,903,138 rows (countries only, single unit) — 82% reduction from raw
+- **3 design decisions locked:** NULLs excluded from fact table, OBS_FLAG not a dimension, Unit as dimension
+- **Reports:** [`docs/quality-report-week2.md`](docs/quality-report-week2.md)
 
 ## Project Structure
 
@@ -54,27 +61,30 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 contract-first-warehouse/
 ├── README.md
 ├── .gitignore
-├── /raw                  # Source data (not tracked in git)
+├── /raw                          # Source data (not tracked in git)
 │   └── nrg_bal_c.csv
-├── /contracts            # Data contracts (YAML)
-│   └── energy_balance_raw.yaml
+├── /contracts
+│   └── energy_balance_raw.yaml   # Data contract v0.2
 ├── /sql
-│   ├── /explore          # Exploration queries
-│   │   └── 01_exploration.sql
-│   ├── /quality          # Quality check queries
-│   │   └── 02_quality_checks.sql
-│   └── /staging          # Staging views
-│       └── 03_staging_views.sql
-├── /docs                 # Documentation
-│   └── quality-report-week1.md
-└── /powerbi              # Power BI files (Week 4+)
+│   ├── /explore
+│   │   └── 01_exploration.sql    # 17 exploration queries
+│   ├── /quality
+│   │   ├── 02_quality_checks.sql # Manual quality checks (Week 1)
+│   │   ├── 04_quality_gates.sql  # Automated quality gates (Week 2)
+│   │   └── 05_completeness_analysis.sql  # Completeness deep dive (Week 2)
+│   └── /staging
+│       ├── 03_staging_views.sql  # Original staging views (Week 1)
+│       └── 06_staging_v2.sql     # 3-tier staging (Week 2)
+├── /docs
+│   ├── quality-report-week1.md
+│   └── quality-report-week2.md
+└── /powerbi                      # Power BI files (Week 4+)
 ```
 
 ## Follow the Build
 
-- **LinkedIn:** Weekly posts every Tuesday - the mistake, the fix, the principle
-- **Newsletter:** [Architecture First](https://architecture-first.beehiiv.com) -
-deeper architecture reasoning every Friday
+- **LinkedIn:** Weekly posts every Tuesday — the mistake, the fix, the principle
+- **Newsletter:** [Architecture First](https://architecture-first.beehiiv.com) — deeper architecture reasoning every Friday
 
 ## License
 
