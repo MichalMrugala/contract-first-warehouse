@@ -74,7 +74,7 @@ contract-first-warehouse/
 
 - **LinkedIn:** Weekly posts every Tuesday - the mistake, the fix, the principle
 - **Newsletter:** [Architecture First](https://architecture-first.beehiiv.com) -
--  deeper architecture reasoning every Friday
+deeper architecture reasoning every Friday
 
 ## License
 
