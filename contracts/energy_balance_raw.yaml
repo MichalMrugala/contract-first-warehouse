@@ -2,8 +2,8 @@ dataContractSpecification: 1.1.0
 id: contract-first-energy-raw-v1
 info:
   title: EU Energy Balance Raw Data
-  version: 0.1.0
-  status: draft
+  version: 0.3.0
+  status: active
   description: >
     Raw Eurostat energy balance data (nrg_bal_c) before staging transformations.
     This contract defines the expected schema, quality rules, and governance
@@ -246,3 +246,50 @@ x_legal_basis:
     the full governance layer — GDPR Article 30 records, data lineage,
     and retention documentation. Having the legal basis defined from
     Day 1 shows that governance is not an afterthought.
+
+# New in v0.3 — Star Schema Model Governance (Week 3)
+
+model:
+  schema_type: star
+  fact_tables:
+    - name: Fact_EnergyBalance
+      grain: "one measured observation per country, product, balance item, unit, year"
+      row_count: 20709414
+      measures:
+        - obs_value
+      dimensions:
+        - Dim_Country (40 individual countries, aggregates excluded)
+        - Dim_EnergyProduct (72 products, 3-level hierarchy)
+        - Dim_BalanceItem (142 balance categories)
+        - Dim_Unit (TJ, KTOE, GWH)
+        - Dim_Year (1990-2024)
+        - Dim_ObsStatus (measured/missing audit trail)
+  design_decisions:
+    - decision: Exclude geographic aggregates (EU27_2020)
+      reasoning: Prevents double-counting. Users SUM individual countries.
+    - decision: Missing rows excluded from fact table
+      reasoning: 18.2M NULL rows documented in stg_energy_missing, not in fact table.
+    - decision: Unit as dimension, all 3 units kept
+      reasoning: SQL First — solve unit selection in warehouse, not in DAX.
+    - decision: OBS_FLAG not promoted to full dimension
+      reasoning: Only 2 values. All fact rows are measured. Dim_ObsStatus exists for audit.
+    - decision: Energy product hierarchy reconstructed manually
+      reasoning: Eurostat provides no parent-child mapping. 49 of 72 mapped, 23 as Other.
+
+# New in v0.3 — EU AI Act Article 10 Mapping (Preview)
+
+x_ai_act_article_10:
+  applicable: false
+  note: >
+    This dataset is not used for AI training.
+    Mapping included as governance best practice and proof-of-concept.
+    EU AI Act enforcement: August 2, 2026.
+  article_10_2_mapping:
+    a_design_choices: "contracts/energy_balance_raw.yaml — quality section"
+    b_data_collection: "Eurostat nrg_bal_c, SDMX bulk download, CC BY 4.0"
+    c_preparation_processing: "sql/staging/06_staging_v2.sql — 3-tier staging"
+    d_labelling_annotation: "N/A — statistical data, not labeled for ML"
+    e_data_gaps: "docs/quality-report-week2.md — 46.14% structural missing"
+    f_bias_examination: "Uniform 53.2% coverage per country — no geographic bias"
+    g_possible_biases: "Product category bias: RA100 = 9.36% vs TOTAL = 100%"
+    h_appropriate_measures: "Missing rows excluded from fact table, documented in stg_energy_missing"
