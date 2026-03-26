@@ -28,7 +28,7 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 |------|-------|-------------------|
 | 1 ✅ | Contract + Raw | Data contract, exploration, quality checks, staging views |
 | 2 ✅ | Quality Gates | Automated quality gates, completeness analysis, 3-tier staging |
-| 3 | Model | Star schema design + dimension tables |
+| 3 ✅ | Star Schema | 6 dimension tables, fact table, energy product hierarchy |
 | 4 | DAX Trap | Connect Power BI, kill unnecessary DAX measures |
 | 5 | Quality | SQL-based quality tests before data touches Power BI |
 | 6 | Dashboard | Minimal DAX, maximum model — the full report |
@@ -47,39 +47,56 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 
 - **Automated quality gates:** 12 rules running in 2 seconds on 39.5M rows
 - **Structural checks:** 8/8 PASS | Consistency: 1/1 PASS
-- **Key finding:** Missing data is structural, not random — every country has identical 53.2% completeness. Root cause: sparse energy product categories (RA100 = 9.36% complete vs TOTAL = 100%)
+- **Key finding:** Missing data is structural, not random — every country has identical 53.2% completeness
 - **The 88% trap:** Counting rows without filtering NULLs overestimates observations by 88%
-- **Unit trap:** Every observation exists in 3 copies (TJ, KTOE, GWH) — dataset is 3x larger than necessary
 - **3-tier staging:** 21.3M clean + 18.2M missing + 0 rejected = 39.5M (every row accounted for)
 - **Fact table preview:** 6,903,138 rows (countries only, single unit) — 82% reduction from raw
-- **3 design decisions locked:** NULLs excluded from fact table, OBS_FLAG not a dimension, Unit as dimension
 - **Reports:** [`docs/quality-report-week2.md`](docs/quality-report-week2.md)
 
-## Project Structure
+## Week 3 Results
 
-```
+- **Star schema:** 6 dimension tables + 1 fact table
+- **Fact table:** 20,709,414 rows (40 countries × 3 units × 72 products × 142 balance items × 35 years)
+- **Grain:** one row = one measured observation (country + product + balance item + unit + year) — verified unique
+- **Dim_Country:** 40 individual countries, EU27 aggregate excluded
+- **Dim_EnergyProduct:** 72 products with 3-level hierarchy (49 mapped, 23 "Other")
+- **Dim_BalanceItem:** 142 balance categories
+- **Dim_Unit:** 3 units (TJ, KTOE, GWH) with conversion factors
+- **Dim_Year:** 35 years (1990–2024) with decade grouping
+- **Dim_ObsStatus:** 2 statuses (measured/missing) for audit trail
+- **Validation:** Zero NULL obs_values, zero orphan keys, grain unique
+- **Key finding:** Germany renewable energy — 10.8x growth from 285,924 TJ (1990) to 3,100,935 TJ (2024) from a 5-line SQL query with no DAX
+
+## Project Structure
 contract-first-warehouse/
 ├── README.md
 ├── .gitignore
 ├── /raw                          # Source data (not tracked in git)
 │   └── nrg_bal_c.csv
 ├── /contracts
-│   └── energy_balance_raw.yaml   # Data contract v0.2
+│   └── energy_balance_raw.yaml   # Data contract v0.3
 ├── /sql
 │   ├── /explore
-│   │   └── 01_exploration.sql    # 17 exploration queries
+│   │   └── 01_exploration.sql    # 17 exploration queries (Week 1)
 │   ├── /quality
 │   │   ├── 02_quality_checks.sql # Manual quality checks (Week 1)
 │   │   ├── 04_quality_gates.sql  # Automated quality gates (Week 2)
 │   │   └── 05_completeness_analysis.sql  # Completeness deep dive (Week 2)
-│   └── /staging
-│       ├── 03_staging_views.sql  # Original staging views (Week 1)
-│       └── 06_staging_v2.sql     # 3-tier staging (Week 2)
+│   ├── /staging
+│   │   ├── 03_staging_views.sql  # Original staging views (Week 1)
+│   │   └── 06_staging_v2.sql     # 3-tier staging (Week 2)
+│   └── /model
+│       ├── 07_dim_country.sql         # Dim_Country (Week 3)
+│       ├── 08_dim_energy_product.sql  # Dim_EnergyProduct with hierarchy (Week 3)
+│       ├── 09_dim_balance_item.sql    # Dim_BalanceItem (Week 3)
+│       ├── 10_dim_unit.sql            # Dim_Unit (Week 3)
+│       ├── 11_dim_year.sql            # Dim_Year (Week 3)
+│       ├── 12_dim_obs_status.sql      # Dim_ObsStatus (Week 3)
+│       └── 13_fact_energy_balance.sql # Fact_EnergyBalance (Week 3)
 ├── /docs
 │   ├── quality-report-week1.md
 │   └── quality-report-week2.md
 └── /powerbi                      # Power BI files (Week 4+)
-```
 
 ## Follow the Build
 
