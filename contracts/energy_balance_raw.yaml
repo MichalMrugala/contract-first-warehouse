@@ -9,6 +9,7 @@ info:
     This contract defines the expected schema, quality rules, and governance
     metadata for the source layer of the Contract First data warehouse.
     Every transformation in the staging layer must trace back to a rule here.
+    Aligned with ODCS v3.1.0 (Bitol / Linux Foundation).
   owner: Michal Mrugala
   contact:
     name: Michal Mrugala
@@ -42,7 +43,7 @@ models:
         description: >
           SDMX metadata field identifying the dataflow.
           Not part of the analytical model — drop in staging.
-      LAST UPDATE:
+      LAST_UPDATE:
         type: string
         required: false
         description: >
@@ -52,7 +53,7 @@ models:
         type: string
         required: true
         description: >
-          Frequency of observation. Should always be 'A' (annual) for this dataset.
+          Frequency of observation. Always 'A' (annual) for this dataset.
         enum:
           - A
       nrg_bal:
@@ -62,25 +63,24 @@ models:
           Energy balance item code. Defines what aspect of the energy balance
           this row measures (e.g., NRGSUP = total energy supply,
           PPRD = primary production, IMP = imports, EXP = exports).
+          142 unique codes in the dataset.
         examples:
           - NRGSUP
           - PPRD
           - IMP
           - EXP
           - GIC
-          - GFC
           - FC_E
       siec:
         type: string
         required: true
         description: >
           Standard International Energy Product Classification code.
-          Identifies the energy product (e.g., TOTAL = all products,
-          SOLID_FF = solid fossil fuels, O4000XBIO = oil and petroleum,
-          RA000 = renewables and biofuels).
+          72 unique product codes with implicit 3-level hierarchy
+          (reconstructed in Dim_EnergyProduct, Week 3).
         examples:
           - TOTAL
-          - SOLID_FF
+          - C0000X0350-0370
           - O4000XBIO
           - G3000
           - RA000
@@ -90,7 +90,7 @@ models:
         type: string
         required: true
         description: >
-          Unit of measurement for the observation value.
+          Unit of measurement. Every observation exists in all 3 units.
           TJ = terajoules, KTOE = kilotonnes of oil equivalent, GWH = gigawatt hours.
         enum:
           - TJ
@@ -103,31 +103,34 @@ models:
           Country or geographic aggregate code.
           ISO 3166-1 alpha-2 for individual countries (DE, FR, PL).
           Eurostat aggregate codes for groups (EU27_2020, EA20).
+          41 unique values: 40 individual countries + aggregates.
+          Aggregates excluded from star schema (Week 3 decision).
         minLength: 2
         maxLength: 10
       TIME_PERIOD:
         type: integer
         required: true
         description: >
-          Year of observation. Annual data from 1990 to present.
+          Year of observation. Annual data covering 35 years.
         minimum: 1990
         maximum: 2024
       OBS_VALUE:
         type: number
         required: false
         description: >
-          Observed value in the specified unit. Can be NULL when data
-          is unavailable, confidential, or not applicable.
-          Negative values ARE valid for certain balance items
-          (exports, stock changes, statistical differences).
+          Observed value in the specified unit. NULL when data
+          is unavailable or not applicable (flagged 'm' in OBS_FLAG).
+          Negative values ARE valid (exports, stock changes).
+          46.14% of all observations have NULL OBS_VALUE.
       OBS_FLAG:
         type: string
         required: false
         description: >
           Observation status flag from Eurostat.
-          Common flags: p = provisional, e = estimated, c = confidential,
-          n = not significant, d = definition differs, u = low reliability.
-          NULL means no flag (normal/validated observation).
+          In practice only 2 values in this dataset:
+          NULL = validated observation with numeric value (53.86%)
+          'm' = missing/unavailable (46.14%).
+          Other possible flags per Eurostat spec: p, e, c, n, d, u, z.
         enum:
           - p
           - e
@@ -136,120 +139,129 @@ models:
           - d
           - u
           - z
+          - m
           - null
       CONF_STATUS:
         type: string
         required: false
         description: >
-          Confidentiality status flag from SDMX format.
-          Discovered during Week 1 exploration - not in original spec.
-          Indicates whether the observation value is confidential.
-          Common values: F = free, N = not publishable, C = confidential.
-```
-
-Commit message: `Fix OBS_FLAG definition and CONF_STATUS enum values`
+          Confidentiality status from SDMX format.
+          Entirely NULL in this dataset — Eurostat included the column
+          but did not populate it. Excluded from star schema.
 
 quality:
   type: custom-sql
   description: >
-    Quality rules derived from data exploration (Week 1).
-    Each rule maps to a SQL check in sql/quality/02_quality_checks.sql.
-    Rules are tested BEFORE any staging transformation runs.
+    Quality rules from Week 1 (structural) and Week 2 (completeness).
+    Each rule maps to SQL checks in sql/quality/.
+    Rules tested BEFORE any staging transformation runs.
   specification:
-    rules:
+    structural_rules:
       - name: no_null_geo
-        description: >
-          Country code must never be NULL. A row without a geo code
-          cannot be attributed to any geography and is useless for
-          dimensional analysis.
+        description: Country code must never be NULL.
         sql_check: COUNT(*) FILTER (WHERE geo IS NULL) = 0
         severity: critical
 
       - name: valid_year_range
-        description: >
-          TIME_PERIOD must be between 1990 and 2024. Values outside
-          this range indicate data loading errors or future projections
-          that should not be in the historical dataset.
+        description: TIME_PERIOD must be between 1990 and 2024.
         sql_check: COUNT(*) FILTER (WHERE TIME_PERIOD < 1990 OR TIME_PERIOD > 2024) = 0
         severity: critical
 
       - name: no_null_nrg_bal
-        description: >
-          Balance item code must never be NULL. Without it, we don't
-          know what aspect of the energy balance this row measures.
+        description: Balance item code must never be NULL.
         sql_check: COUNT(*) FILTER (WHERE nrg_bal IS NULL) = 0
         severity: critical
 
       - name: no_null_unit
-        description: >
-          Unit of measurement must never be NULL. Without it, the
-          OBS_VALUE is meaningless — 1000 TJ and 1000 GWH are
-          completely different quantities.
+        description: Unit of measurement must never be NULL.
         sql_check: COUNT(*) FILTER (WHERE unit IS NULL) = 0
         severity: critical
 
       - name: valid_units_only
-        description: >
-          Unit must be one of the expected values: TJ, KTOE, GWH.
-          Unknown units indicate data format changes or loading errors.
+        description: Unit must be TJ, KTOE, or GWH.
         sql_check: COUNT(*) FILTER (WHERE unit NOT IN ('TJ', 'KTOE', 'GWH')) = 0
         severity: warning
 
       - name: annual_frequency_only
-        description: >
-          Frequency must be 'A' (annual). This dataset should not
-          contain monthly or quarterly data. Mixed frequencies would
-          break aggregation logic.
+        description: Frequency must be 'A' (annual).
         sql_check: COUNT(*) FILTER (WHERE freq != 'A') = 0
         severity: warning
 
       - name: no_duplicate_keys
-        description: >
-          The natural key (geo + nrg_bal + siec + unit + TIME_PERIOD)
-          must be unique. Duplicates cause double-counting in the fact table.
+        description: Natural key (geo + nrg_bal + siec + unit + TIME_PERIOD) must be unique.
         severity: critical
 
       - name: row_count_minimum
-        description: >
-          Dataset must have at least 100,000 rows. Significantly fewer
-          indicates a truncated download or wrong dataset version.
+        description: Dataset must have at least 100,000 rows.
         sql_check: COUNT(*) >= 100000
         severity: critical
 
       - name: geo_code_length
-        description: >
-          Country codes should be 2 characters (ISO) or recognized
-          aggregate codes. Codes longer than 10 characters are suspicious.
+        description: Country codes should not exceed 10 characters.
         sql_check: COUNT(*) FILTER (WHERE LENGTH(geo) > 10) = 0
         severity: warning
+
+    completeness_rules:
+      - name: unit_distribution_equal
+        description: Each unit (TJ, KTOE, GWH) should have ~33.33% of rows.
+        severity: warning
+
+      - name: completeness_coverage
+        description: Expected completeness is 53.86%. Uniform across all countries.
+        severity: info
+        expected_value: 53.86
+
+      - name: no_rejected_rows
+        description: Rejected staging tier must have 0 rows.
+        sql_check: COUNT(*) = 0 (on stg_energy_rejected)
+        severity: critical
+
+  completeness:
+    expected_coverage_pct: 53.86
+    missing_reason: >
+      Product sparsity — Eurostat defines 72 energy product categories
+      but most countries do not produce all of them.
+      Every country has identical 53.2% coverage (structural, not random).
+    missing_count: 18218538
+    action: exclude_from_fact_table
+    documentation: docs/quality-report-week2.md
+
+  staging:
+    tiers:
+      clean: 21268329
+      missing: 18218538
+      rejected: 0
+    total: 39486867
+    fact_table_preview: 6903138
+    reduction_from_raw: "82%"
 
 links:
   source_dataset: https://ec.europa.eu/eurostat/databrowser/view/nrg_bal_c/default/table?lang=en
   source_api: https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_bal_c/?format=SDMX-CSV&compressed=true
   specification: https://github.com/datacontract/datacontract-specification
+  odcs_standard: https://bitol-io.github.io/open-data-contract-standard/
 
 x_legal_basis:
   gdpr_applicable: false
   reason: >
     No personal data. Public statistical data published by Eurostat
-    under the European Commission's open data policy. No individual-level
-    data, no pseudonymized identifiers, no behavioral data.
+    under the European Commission's open data policy.
     All observations are national-level aggregates.
   license: CC BY 4.0 Eurostat
   data_protection_impact_assessment_required: false
   processing_record_required: false
   retention_policy: >
-    Data retained for the duration of the project and educational purposes.
+    Data retained for project duration and educational purposes.
     Source data freely re-downloadable from Eurostat at any time.
   note_for_week_7: >
-    This field was planted in Week 1 intentionally. In Week 7, we add
-    the full governance layer — GDPR Article 30 records, data lineage,
-    and retention documentation. Having the legal basis defined from
-    Day 1 shows that governance is not an afterthought.
+    In Week 7 we add the full governance layer — GDPR Article 30 records,
+    data lineage, and retention documentation.
 
-# New in v0.3 — Star Schema Model Governance (Week 3)
+# ═══════════════════════════════════════════════════════
+# Star Schema Model Governance (Week 3)
+# ═══════════════════════════════════════════════════════
 
-model:
+star_schema:
   schema_type: star
   fact_tables:
     - name: Fact_EnergyBalance
@@ -258,12 +270,33 @@ model:
       measures:
         - obs_value
       dimensions:
-        - Dim_Country (40 individual countries, aggregates excluded)
-        - Dim_EnergyProduct (72 products, 3-level hierarchy)
-        - Dim_BalanceItem (142 balance categories)
-        - Dim_Unit (TJ, KTOE, GWH)
-        - Dim_Year (1990-2024)
-        - Dim_ObsStatus (measured/missing audit trail)
+        - Dim_Country
+        - Dim_EnergyProduct
+        - Dim_BalanceItem
+        - Dim_Unit
+        - Dim_Year
+        - Dim_ObsStatus
+  dimension_details:
+    Dim_Country:
+      rows: 40
+      note: Individual countries only. Aggregates (EU27_2020, EA20) excluded.
+    Dim_EnergyProduct:
+      rows: 72
+      hierarchy_levels: 3
+      mapped: 49
+      unmapped_as_other: 23
+    Dim_BalanceItem:
+      rows: 142
+      categories: 5
+    Dim_Unit:
+      rows: 3
+      values: [TJ, KTOE, GWH]
+    Dim_Year:
+      rows: 35
+      range: 1990-2024
+    Dim_ObsStatus:
+      rows: 2
+      values: [measured, missing]
   design_decisions:
     - decision: Exclude geographic aggregates (EU27_2020)
       reasoning: Prevents double-counting. Users SUM individual countries.
@@ -272,18 +305,30 @@ model:
     - decision: Unit as dimension, all 3 units kept
       reasoning: SQL First — solve unit selection in warehouse, not in DAX.
     - decision: OBS_FLAG not promoted to full dimension
-      reasoning: Only 2 values. All fact rows are measured. Dim_ObsStatus exists for audit.
+      reasoning: Only 2 values. All fact rows are measured. Dim_ObsStatus for audit.
     - decision: Energy product hierarchy reconstructed manually
-      reasoning: Eurostat provides no parent-child mapping. 49 of 72 mapped, 23 as Other.
+      reasoning: Eurostat provides no parent-child mapping. SDMX codelist used.
+  validation:
+    null_obs_values: 0
+    orphan_keys: 0
+    grain_unique: true
+  key_findings:
+    - "Norway #1 in total energy production (1,059,228,378 TJ cumulative)"
+    - "Germany renewables: 10.8x growth from 285,924 TJ (1990) to 3,100,935 TJ (2024)"
 
-# New in v0.3 — EU AI Act Article 10 Mapping (Preview)
+# ═══════════════════════════════════════════════════════
+# EU AI Act Article 10 Mapping (Preview)
+# Aligned with ODCS v3.1.0 (Bitol / Linux Foundation)
+# Enforcement: August 2, 2026
+# ═══════════════════════════════════════════════════════
 
 x_ai_act_article_10:
   applicable: false
   note: >
     This dataset is not used for AI training.
     Mapping included as governance best practice and proof-of-concept.
-    EU AI Act enforcement: August 2, 2026.
+    EU AI Act Article 10 requires documented data governance for
+    datasets used in high-risk AI systems.
   article_10_2_mapping:
     a_design_choices: "contracts/energy_balance_raw.yaml — quality section"
     b_data_collection: "Eurostat nrg_bal_c, SDMX bulk download, CC BY 4.0"
