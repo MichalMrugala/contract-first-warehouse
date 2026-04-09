@@ -1,0 +1,31 @@
+{
+  "name": "EU Energy Architecture",
+  "dataColors": [
+    "#00827A", "#E8A838", "#1B3A4B", "#D4574B",
+    "#8B6CAF", "#5B8DB8", "#8B6B4A", "#CC79A7"
+  ],
+  "foreground": "#1B2A3D",
+  "background": "#F7F8FA",
+  "tableAccent": "#00827A",
+  "maximum": "#005F59",
+  "minimum": "#E6F3F2",
+  "center": "#F7F8FA",
+  "good": "#00827A",
+  "neutral": "#E8A838",
+  "bad": "#D4574B",
+  "textClasses": {
+    "callout": { "fontFace": "Segoe UI Semibold", "fontSize": 28, "color": "#1B2A3D" },
+    "title": { "fontFace": "Segoe UI Semibold", "fontSize": 12, "color": "#1B2A3D" },
+    "header": { "fontFace": "Segoe UI", "fontSize": 11, "color": "#6B7D8D" },
+    "label": { "fontFace": "Segoe UI", "fontSize": 10, "color": "#6B7D8D" }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [{ "color": {"solid": {"color": "#FFFFFF"}}, "transparency": 0 }],
+        "border": [{ "show": true, "color": {"solid": {"color": "#E0E4E8"}}, "radius": 8 }],
+        "dropShadow": [{ "show": true, "color": {"solid": {"color": "#000000"}}, "position": "outer", "preset": "bottomRight", "transparency": 92, "blur": 4 }]
+      }
+    }
+  }
+}

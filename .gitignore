@@ -34,3 +34,4 @@ venv/
 *.tmp
 *.bak
 *.log
+export/parquet/fact_energy_balance.parquet
