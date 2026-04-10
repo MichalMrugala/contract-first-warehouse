@@ -1,0 +1,490 @@
+dataContractSpecification: 1.1.0
+id: contract-first-energy-raw-v1
+info:
+  title: EU Energy Balance Raw Data
+  version: 0.4.0
+  status: active
+  description: >
+    Raw Eurostat energy balance data (nrg_bal_c) before staging transformations.
+    This contract defines the expected schema, quality rules, governance metadata,
+    EU AI Act Article 10 compliance mapping, and GDPR Article 30 records.
+    Every transformation traces back to a rule here.
+    Aligned with ODCS v3.1.0 (Bitol / Linux Foundation).
+  owner: Michal Mrugala
+  contact:
+    name: Michal Mrugala
+    url: https://architecture-first.beehiiv.com
+
+servers:
+  local:
+    type: local
+    path: warehouse.duckdb
+    format: duckdb
+
+terms:
+  usage: >
+    Analytics and reporting on EU energy consumption patterns.
+    Educational project — Contract First build-in-public series.
+  limitations: >
+    Source data must be attributed to Eurostat.
+    No redistribution without proper attribution.
+  billing: Free (Eurostat open data)
+  noticePeriod: N/A
+
+models:
+  raw_energy:
+    description: >
+      Raw energy balance data as loaded from Eurostat SDMX-CSV export.
+      One row = one observation (country + balance item + energy product + unit + year).
+    fields:
+      DATAFLOW:
+        type: string
+        required: false
+        description: SDMX metadata field. Drop in staging.
+      LAST_UPDATE:
+        type: string
+        required: false
+        description: SDMX metadata field. Drop in staging.
+      freq:
+        type: string
+        required: true
+        description: Frequency of observation. Always 'A' (annual).
+        enum: [A]
+      nrg_bal:
+        type: string
+        required: true
+        description: Energy balance item code. 142 unique codes.
+      siec:
+        type: string
+        required: true
+        description: Energy product code. 72 unique with 3-level hierarchy.
+      unit:
+        type: string
+        required: true
+        description: Unit of measurement.
+        enum: [TJ, KTOE, GWH]
+      geo:
+        type: string
+        required: true
+        description: Country or aggregate code. ISO 3166-1 alpha-2 for countries.
+        minLength: 2
+        maxLength: 10
+      TIME_PERIOD:
+        type: integer
+        required: true
+        description: Year of observation.
+        minimum: 1990
+        maximum: 2024
+      OBS_VALUE:
+        type: number
+        required: false
+        description: >
+          Observed value. NULL when unavailable (flagged 'm').
+          46.14% NULL. Negative values valid for exports/stock changes.
+      OBS_FLAG:
+        type: string
+        required: false
+        description: Observation status flag. NULL = validated, 'm' = missing.
+      CONF_STATUS:
+        type: string
+        required: false
+        description: Confidentiality status. Entirely NULL in this dataset.
+
+quality:
+  type: custom-sql
+  specification:
+    structural_rules:
+      - name: no_null_geo
+        sql_check: "COUNT(*) FILTER (WHERE geo IS NULL) = 0"
+        severity: critical
+      - name: valid_year_range
+        sql_check: "COUNT(*) FILTER (WHERE TIME_PERIOD < 1990 OR TIME_PERIOD > 2024) = 0"
+        severity: critical
+      - name: no_null_nrg_bal
+        sql_check: "COUNT(*) FILTER (WHERE nrg_bal IS NULL) = 0"
+        severity: critical
+      - name: no_null_unit
+        sql_check: "COUNT(*) FILTER (WHERE unit IS NULL) = 0"
+        severity: critical
+      - name: valid_units_only
+        sql_check: "COUNT(*) FILTER (WHERE unit NOT IN ('TJ', 'KTOE', 'GWH')) = 0"
+        severity: warning
+      - name: annual_frequency_only
+        sql_check: "COUNT(*) FILTER (WHERE freq != 'A') = 0"
+        severity: warning
+      - name: no_duplicate_keys
+        severity: critical
+      - name: row_count_minimum
+        sql_check: "COUNT(*) >= 100000"
+        severity: critical
+      - name: geo_code_length
+        sql_check: "COUNT(*) FILTER (WHERE LENGTH(geo) > 10) = 0"
+        severity: warning
+    completeness_rules:
+      - name: unit_distribution_equal
+        severity: warning
+      - name: completeness_coverage
+        severity: info
+        expected_value: 53.86
+      - name: no_rejected_rows
+        sql_check: "COUNT(*) = 0 (on stg_energy_rejected)"
+        severity: critical
+    star_schema_rules:
+      - name: fact_row_count
+        sql_check: "COUNT(*) = 20709414"
+        severity: critical
+        file: sql/quality/15_star_schema_tests.sql
+      - name: no_null_foreign_keys
+        severity: critical
+      - name: referential_integrity
+        severity: critical
+      - name: grain_uniqueness
+        severity: critical
+      - name: no_null_obs_values
+        severity: critical
+
+  staging:
+    tiers:
+      clean: 21268329
+      missing: 18218538
+      rejected: 0
+    total: 39486867
+
+star_schema:
+  schema_type: star
+  fact_tables:
+    - name: Fact_EnergyBalance
+      grain: "one measured observation per country, product, balance item, unit, year"
+      row_count: 20709414
+      measures: [obs_value]
+      dimensions: [Dim_Country, Dim_EnergyProduct, Dim_BalanceItem, Dim_Unit, Dim_Year, Dim_ObsStatus]
+  dimension_details:
+    Dim_Country:
+      rows: 40
+      note: Individual countries only. Aggregates excluded.
+    Dim_EnergyProduct:
+      rows: 72
+      hierarchy_levels: 3
+    Dim_BalanceItem:
+      rows: 142
+    Dim_Unit:
+      rows: 3
+    Dim_Year:
+      rows: 35
+      range: 1990-2024
+    Dim_ObsStatus:
+      rows: 2
+  design_decisions:
+    - decision: Exclude geographic aggregates
+      reasoning: Prevents double-counting
+    - decision: Missing rows excluded from fact table
+      reasoning: 18.2M documented in stg_energy_missing
+    - decision: Unit as dimension
+      reasoning: SQL First — solve in warehouse not DAX
+    - decision: "Total" excluded from Power BI via report filter
+      reasoning: Aggregate category caused double-counting across all visuals
+    - decision: Latest-year DAX measures for KPI cards
+      reasoning: Visual-level filters break slicer interaction
+  validation:
+    null_obs_values: 0
+    orphan_keys: 0
+    grain_unique: true
+
+links:
+  source_dataset: https://ec.europa.eu/eurostat/databrowser/view/nrg_bal_c/default/table?lang=en
+  source_api: https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_bal_c/?format=SDMX-CSV&compressed=true
+  specification: https://github.com/datacontract/datacontract-specification
+  odcs_standard: https://bitol-io.github.io/open-data-contract-standard/
+  github_repo: https://github.com/MichalMrugala/contract-first-warehouse
+
+# ═══════════════════════════════════════════════════════
+# EU AI Act Article 10 — Full Compliance Mapping
+# Regulation (EU) 2024/1689, Article 10: Data and Data Governance
+# Enforcement: August 2, 2026
+# Penalty: up to €20M or 4% of global annual turnover
+# ═══════════════════════════════════════════════════════
+
+x_ai_act_article_10:
+  applicable: demonstration
+  classification: not-high-risk
+  note: >
+    This dataset is public statistical data not used for AI training.
+    This mapping is included as a governance best practice and proof-of-concept
+    demonstrating how YAML data contracts can serve as Article 10 compliance
+    documentation. Every sub-clause maps to a specific contract field or SQL file.
+
+  article_10_1:
+    requirement: >
+      High-risk AI systems which make use of techniques involving the training
+      of AI models with data shall be developed on the basis of training,
+      validation and testing data sets that meet the quality criteria
+      referred to in paragraphs 2 to 5.
+    compliance_approach: >
+      Quality criteria defined in this contract's quality section.
+      22 automated rules across 3 categories (structural, completeness, star schema).
+      All rules executable via: sql/quality/02_quality_checks.sql,
+      sql/quality/04_quality_gates.sql, sql/quality/15_star_schema_tests.sql
+    evidence_files:
+      - contracts/energy_balance_v0.4.yaml#quality
+      - sql/quality/04_quality_gates.sql
+      - sql/quality/15_star_schema_tests.sql
+
+  article_10_2_a:
+    requirement: >
+      The relevant design choices for training, validation and testing data sets.
+    mapping: >
+      Design choices documented in this contract:
+      - Schema design: star schema with 6 dimensions (star_schema section)
+      - Quality thresholds: 9 structural rules, all must PASS (quality section)
+      - Staging strategy: 3-tier clean/missing/rejected (staging section)
+      - Aggregation exclusion: EU27 aggregates removed to prevent double-counting
+      - Unit strategy: all 3 units kept as dimension, not filtered
+    evidence_files:
+      - contracts/energy_balance_v0.4.yaml#star_schema.design_decisions
+      - contracts/energy_balance_v0.4.yaml#quality.specification
+
+  article_10_2_b:
+    requirement: >
+      Data collection processes and the origin of data, and in the case
+      of personal data, the original purpose of the data collection.
+    mapping: >
+      Source: Eurostat nrg_bal_c (Complete Energy Balances)
+      Origin: European Commission statistical office
+      Collection method: SDMX-CSV bulk download via Eurostat API
+      License: CC BY 4.0 (Eurostat open data policy)
+      No personal data involved — all observations are national-level aggregates.
+      API endpoint documented in links.source_api
+    evidence_files:
+      - contracts/energy_balance_v0.4.yaml#links.source_api
+      - contracts/energy_balance_v0.4.yaml#x_legal_basis
+
+  article_10_2_c:
+    requirement: >
+      The relevant data-preparation processing operations, such as annotation,
+      labelling, cleaning, updating, enrichment and aggregation.
+    mapping: >
+      Full processing pipeline documented and reproducible:
+      1. Ingestion: DuckDB read_csv_auto (sql/explore/01_exploration.sql)
+      2. Quality gates: 12 automated rules (sql/quality/04_quality_gates.sql)
+      3. Staging: 3-tier separation (sql/staging/06_staging_v2.sql)
+         - Clean: 21,268,329 rows (OBS_VALUE present, all rules pass)
+         - Missing: 18,218,538 rows (structurally valid, no measurement)
+         - Rejected: 0 rows (all structural rules pass)
+      4. Star schema: 6 dimensions + 1 fact (sql/model/07-13*.sql)
+      5. Export: Parquet ZSTD (sql/export/14_parquet_export.sql)
+      No annotation or labelling — statistical data, not ML training data.
+      Cleaning = exclusion of aggregate rows and NULL measurements.
+      Enrichment = 3-level product hierarchy reconstructed from SIEC codes.
+    evidence_files:
+      - sql/staging/06_staging_v2.sql
+      - sql/model/13_fact_energy_balance.sql
+      - sql/export/14_parquet_export.sql
+
+  article_10_2_d:
+    requirement: >
+      The formulation of assumptions, notably with respect to the information
+      that the data are supposed to measure and represent.
+    mapping: >
+      Assumptions documented:
+      - Each row represents one energy observation per country/product/balance/unit/year
+      - NULL OBS_VALUE = "missing by design" (Eurostat flag 'm'), NOT data error
+      - Negative values are valid for exports and stock changes
+      - 3 units (TJ, KTOE, GWH) represent the same observation in different scales
+      - Geographic aggregates (EU27_2020) are computed, not measured — excluded
+    evidence_files:
+      - contracts/energy_balance_v0.4.yaml#models.raw_energy.fields
+      - docs/quality-report-week1.md
+      - docs/quality-report-week2.md
+
+  article_10_2_e:
+    requirement: >
+      An assessment of the availability, quantity and suitability of the
+      data sets that are needed, and identification of possible data gaps
+      or shortcomings and how those gaps and shortcomings can be addressed.
+    mapping: >
+      Availability: 39,486,867 rows, 35 years (1990-2024), 40 countries
+      Gaps identified:
+      - 46.14% of observations have NULL OBS_VALUE (18.2M rows)
+      - Missing data is STRUCTURAL: product sparsity, not random failure
+      - Every country has identical 53.2% completeness (uniform pattern)
+      - Temporal gap: pre-2000 data slightly less complete for newer products
+      Suitability assessment:
+      - 21.3M clean observations sufficient for analytical dashboard
+      - Missing rows documented in stg_energy_missing (not discarded silently)
+      - 88% overcount trap: naive row counting inflates observation estimates
+    evidence_files:
+      - docs/quality-report-week2.md
+      - sql/quality/05_completeness_analysis.sql
+
+  article_10_2_f:
+    requirement: >
+      Examination in view of possible biases that are likely to affect the
+      health and safety of persons, have a negative impact on fundamental
+      rights or lead to discrimination.
+    mapping: >
+      Geographic bias examination:
+      - All 40 countries have identical 53.2% completeness — NO geographic bias
+      - Coverage is uniform across Western, Eastern, Northern, Southern Europe
+      Temporal bias examination:
+      - Pre-2000: slightly lower completeness for renewable energy products
+      - Post-2010: most complete period across all categories
+      - Documented in quality-report-week2.md (Query 6: heatmap)
+      Category bias examination:
+      - Product coverage varies: TOTAL = 100%, RA100 (renewables) = 9.36%
+      - Niche products (biofuels, waste) have <10% non-NULL rate
+      - Aggregate products have highest coverage — bias toward conventional energy
+      No health/safety or fundamental rights impact (public statistical data).
+    evidence_files:
+      - sql/quality/05_completeness_analysis.sql
+      - docs/quality-report-week2.md
+
+  article_10_2_g:
+    requirement: >
+      The identification of relevant data gaps or shortcomings that prevent
+      compliance with this Regulation, and how those gaps and shortcomings
+      can be addressed.
+    mapping: >
+      Identified gaps:
+      1. Product sparsity: 72 products but most countries report <50%
+         → Addressed: missing rows excluded from fact table, documented
+      2. Temporal sparsity: newer products missing before 2000
+         → Addressed: year dimension includes decade grouping for filtering
+      3. Aggregate contamination: "Total" category causes double-counting
+         → Addressed: excluded via report-level filter in Power BI
+      4. Unit redundancy: 3 units per observation = 3x data volume
+         → Addressed: unit as slicer dimension, not hardcoded filter
+      Remaining limitation: no sub-national data (only country-level aggregates)
+    evidence_files:
+      - contracts/energy_balance_v0.4.yaml#star_schema.design_decisions
+
+  article_10_2_h:
+    requirement: >
+      Appropriate measures to detect, prevent and mitigate possible biases
+      identified according to point (g).
+    mapping: >
+      Measures implemented:
+      1. 3-tier staging: clean/missing/rejected — every row accounted for
+      2. Missing rows NOT imputed — excluded with full documentation
+      3. Quality gates run BEFORE star schema build (fail = no dashboard)
+      4. 10 automated star schema tests (sql/quality/15_star_schema_tests.sql)
+      5. Contract versioning: changes tracked in YAML, committed to git
+      6. All SQL reproducible: anyone can re-run from source data
+      Monitoring: quality tests re-run on every data refresh
+    evidence_files:
+      - sql/quality/15_star_schema_tests.sql
+      - sql/staging/06_staging_v2.sql
+
+# ═══════════════════════════════════════════════════════
+# GDPR Article 30 — Records of Processing Activities
+# ═══════════════════════════════════════════════════════
+
+x_gdpr_article_30:
+  applicable: false
+  reason: No personal data processed.
+  record:
+    controller: "Michał Mrugała (educational project)"
+    processing_purpose: "Analytics and reporting on EU energy consumption patterns"
+    legal_basis: "Legitimate interest — public statistical data analysis for educational purposes"
+    data_categories: "National-level energy statistics (aggregated, non-personal)"
+    data_subjects: "None — no personal data involved"
+    recipients: "Public GitHub repository, Power BI dashboard (local), Beehiiv newsletter"
+    international_transfers: "Source data from Eurostat (EU institution). GitHub (US) — standard contractual clauses."
+    retention_period: "Project duration. Source data freely re-downloadable from Eurostat."
+    security_measures: "Version control (git), no authentication required (public data)"
+    dpo_required: false
+    dpia_required: false
+    note: >
+      While GDPR Article 30 records are not legally required for this project
+      (no personal data), maintaining this record demonstrates governance
+      best practice and mirrors the documentation discipline required by
+      EU AI Act Article 10 for high-risk AI systems.
+
+# ═══════════════════════════════════════════════════════
+# Data Lineage — Full Pipeline Documentation
+# ═══════════════════════════════════════════════════════
+
+x_data_lineage:
+  pipeline_name: "Contract First Energy Warehouse"
+  stages:
+    - stage: 1_source
+      name: "Eurostat SDMX-CSV"
+      input: "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nrg_bal_c/"
+      output: "raw/nrg_bal_c.csv"
+      format: "SDMX-CSV (compressed)"
+      rows: 39486867
+      license: "CC BY 4.0"
+
+    - stage: 2_ingestion
+      name: "DuckDB raw load"
+      input: "raw/nrg_bal_c.csv"
+      output: "warehouse.duckdb → raw_energy table"
+      method: "CREATE TABLE raw_energy AS SELECT * FROM read_csv_auto('raw/nrg_bal_c.csv')"
+      sql_file: "sql/explore/01_exploration.sql"
+      rows: 39486867
+
+    - stage: 3_quality_gates
+      name: "Automated quality validation"
+      input: "raw_energy"
+      output: "quality_gate_results table"
+      sql_file: "sql/quality/04_quality_gates.sql"
+      rules: 12
+      result: "8/8 structural PASS, 1/1 consistency PASS"
+
+    - stage: 4_staging
+      name: "3-tier staging"
+      input: "raw_energy"
+      output: "stg_energy_clean, stg_energy_missing, stg_energy_rejected"
+      sql_file: "sql/staging/06_staging_v2.sql"
+      clean_rows: 21268329
+      missing_rows: 18218538
+      rejected_rows: 0
+
+    - stage: 5_star_schema
+      name: "Dimensional model"
+      input: "stg_energy_clean"
+      output: "Fact_EnergyBalance + 6 dimension tables"
+      sql_files:
+        - "sql/model/07_dim_country.sql"
+        - "sql/model/08_dim_energy_product.sql"
+        - "sql/model/09_dim_balance_item.sql"
+        - "sql/model/10_dim_unit.sql"
+        - "sql/model/11_dim_year.sql"
+        - "sql/model/12_dim_obs_status.sql"
+        - "sql/model/13_fact_energy_balance.sql"
+      fact_rows: 20709414
+
+    - stage: 6_schema_tests
+      name: "Star schema quality tests"
+      input: "Fact_EnergyBalance + dimensions"
+      output: "star_schema_test_results"
+      sql_file: "sql/quality/15_star_schema_tests.sql"
+      tests: 24
+      result: "All PASS"
+
+    - stage: 7_export
+      name: "Parquet export"
+      input: "Star schema tables"
+      output: "export/parquet/*.parquet"
+      sql_file: "sql/export/14_parquet_export.sql"
+      compression: "ZSTD"
+
+    - stage: 8_visualization
+      name: "Power BI dashboard"
+      input: "export/parquet/*.parquet"
+      output: "powerbi/contract_first.pbix"
+      pages: 7
+      dax_measures: 9
+      theme: "powerbi/themes/eu_energy_architecture.json"
+
+  traceability: >
+    Every transformation is traceable: YAML contract rule → SQL file → test result.
+    No transformation exists without a documented reason in the contract.
+    No data enters the dashboard without passing automated quality gates.
+
+x_legal_basis:
+  gdpr_applicable: false
+  reason: No personal data.
+  license: CC BY 4.0 Eurostat
+  ai_act_applicable: demonstration
+  ai_act_article_10_mapped: true
+  enforcement_date: "2026-08-02"
