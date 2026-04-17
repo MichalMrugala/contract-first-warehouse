@@ -1,7 +1,7 @@
 ﻿# Contract First
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-00827A.svg)](https://opensource.org/licenses/MIT)
-[![Release](https://img.shields.io/github/v/release/MichalMrugala/contract-first-warehouse?color=00827A)](https://github.com/MichalMrugala/contract-first-warehouse/releases)
+[![Release](https://img.shields.io/github/v/tag/MichalMrugala/contract-first-warehouse?label=release&color=00827A)](https://github.com/MichalMrugala/contract-first-warehouse/releases)
 [![EU AI Act](https://img.shields.io/badge/EU%20AI%20Act-Article%2010-00827A.svg)](docs/article-10-mapping.md)
 [![Newsletter](https://img.shields.io/badge/Newsletter-Architecture%20First-00827A.svg)](https://architecture-first.beehiiv.com)
 
@@ -59,8 +59,8 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 ## The Stack
 
 - **Database:** DuckDB v1.5.0 (local, serverless, columnar)
-- **Data Source:** Eurostat `nrg_bal_c` — Complete Energy Balances (EU-27, 1990–2024)
-- **Contracts:** ODCS v3.1.0 (YAML) with custom `x_ai_act_article_10` extension
+- **Data Source:** Eurostat nrg_bal_c — Complete Energy Balances (EU-27, 1990–2024)
+- **Contracts:** ODCS v3.1.0 (YAML) with custom x_ai_act_article_10 extension
 - **Visualization:** Power BI Desktop
 - **Version Control:** Git + GitHub
 
@@ -70,7 +70,7 @@ Problems solved in SQL stay solved. Problems deferred to Power BI multiply.
 
 Each of the 8 Article 10 sub-clauses maps to specific YAML fields in the data contract. The contract is validated on every pipeline run via SQL tests — not signed off once and forgotten.
 
-**Read the full mapping:** [`docs/article-10-mapping.md`](docs/article-10-mapping.md)
+**Read the full mapping:** [docs/article-10-mapping.md](docs/article-10-mapping.md)
 
 The mapping covers:
 - Sub-clause 2(a) — Data governance practices
@@ -86,12 +86,12 @@ The mapping covers:
 
 ## 8-Week Build Log
 
-| Week | Layer | Status | Read |
+| Week | Layer | Status | Notes |
 |---|---|---|---|
 | 1 | Contract + Raw + Exploration | ✅ | [Quality Report](docs/quality-report-week1.md) |
 | 2 | Quality Gates + 3-tier Staging | ✅ | [Quality Report](docs/quality-report-week2.md) |
-| 3 | Star Schema (6 dims + fact) | ✅ | [Schema docs](docs/quality-report-week2.md) |
-| 4 | Power BI Connection + DAX | ✅ | [DAX catalog below](#dax-measure-catalog) |
+| 3 | Star Schema (6 dims + fact) | ✅ | 20.7M row fact table |
+| 4 | Power BI Connection + DAX | ✅ | See DAX catalog below |
 | 5 | DAX Refinement + KPI Logic | ✅ | Renewable share fix, CAGR, balance filters |
 | 6 | Final Dashboard (7 pages) | ✅ | Executive Pulse, Geographic, Energy Mix, Balance Flow, Transition Story, Country Profile, Product Detail |
 | 7 | Governance Layer (YAML v0.4) | ✅ | Article 10 + GDPR Art 30 + lineage |
@@ -101,7 +101,7 @@ The mapping covers:
 
 ## Key Findings
 
-- **46% of source data is structurally missing** (Eurostat flag `m`). Treating NULLs as zeros overestimates totals by 88%.
+- **46% of source data is structurally missing** (Eurostat flag m). Treating NULLs as zeros overestimates totals by 88%.
 - **Germany renewable energy** grew **10.8x** from 1990 to 2024 (285,924 TJ → 3,100,935 TJ).
 - **Norway leads** total energy production across the EU-27 dataset.
 - **9 DAX measures replaced an estimated 40+** that a flat data model would require. Star schema did the work.
@@ -112,73 +112,76 @@ The mapping covers:
 
 | Measure | DAX Pattern | Purpose |
 |---|---|---|
-| Total Energy | `SUM(obs_value)` | Base aggregation |
-| YoY Change % | `CALCULATE + FILTER(ALL)` | Year-over-year comparison |
-| CAGR | `POWER(DIVIDE, 1/N) - 1` | Compound annual growth rate |
-| Share of Total % | `DIVIDE + ALL(Dim_EnergyProduct)` | Product share of total |
-| Moving Avg 3Y | `AVERAGEX + FILTER(ALL)` | 3-year smoothing |
-| Latest Energy | `CALCULATE + MAX(year)` | Dynamic KPI for slicer |
-| Latest YoY | `CALCULATE + MAX(year)` | Dynamic YoY KPI |
-| Latest Renewable Share | `CALCULATE + MAX(year) + filter` | Dynamic renewables KPI |
-| Latest Germany Renewables | `CALCULATE + MAX(year) + filters` | Country-specific KPI |
+| Total Energy | SUM(obs_value) | Base aggregation |
+| YoY Change % | CALCULATE + FILTER(ALL) | Year-over-year comparison |
+| CAGR | POWER(DIVIDE, 1/N) - 1 | Compound annual growth rate |
+| Share of Total % | DIVIDE + ALL(Dim_EnergyProduct) | Product share of total |
+| Moving Avg 3Y | AVERAGEX + FILTER(ALL) | 3-year smoothing |
+| Latest Energy | CALCULATE + MAX(year) | Dynamic KPI for slicer |
+| Latest YoY | CALCULATE + MAX(year) | Dynamic YoY KPI |
+| Latest Renewable Share | CALCULATE + MAX(year) + filter | Dynamic renewables KPI |
+| Latest Germany Renewables | CALCULATE + MAX(year) + filters | Country-specific KPI |
 
 ---
 
 ## Project Structure
-contract-first-warehouse/
-├── README.md
-├── LICENSE
-├── CITATION.cff
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── CODE_OF_CONDUCT.md
-├── .gitignore
-├── /raw                          # Source data (gitignored)
-│   └── nrg_bal_c.csv
-├── /contracts
-│   └── energy_balance_raw.yaml   # Data contract v0.4 + Article 10 + GDPR Art 30
-├── /sql
-│   ├── /explore                  # 17 exploration queries
-│   ├── /quality                  # 24 automated tests
-│   ├── /staging                  # 3-tier staging (clean/missing/rejected)
-│   └── /model                    # 6 dimension tables + fact table
-├── /export/parquet               # Star schema for Power BI consumption
-├── /powerbi
-│   ├── /themes                   # Custom teal theme (eu_energy_architecture.json)
-│   └── contract_first.pbix       # Power BI report (binary, gitignored)
-└── /docs
-├── article-10-mapping.md     # The reference EU AI Act Article 10 mapping
-├── quality-report-week1.md
-├── quality-report-week2.md
-└── architecture-sketch.png
+
+Top-level files:
+
+- **README.md** — this document
+- **LICENSE** — MIT for code, Eurostat CC BY 4.0 for data
+- **CITATION.cff** — formal citation metadata
+- **CHANGELOG.md** — version history per weekend
+- **CONTRIBUTING.md** — contribution guidelines
+- **CODE_OF_CONDUCT.md** — community standards
+- **.gitignore** — excludes raw data and binary files
+
+Folders:
+
+- **raw/** — source Eurostat data (gitignored)
+- **contracts/** — YAML data contract v0.4 with Article 10 + GDPR Art 30 mapping
+- **sql/explore/** — 17 exploration queries (Week 1)
+- **sql/quality/** — 24 automated tests (Weeks 1, 2, 5)
+- **sql/staging/** — 3-tier staging views: clean, missing, rejected (Week 2)
+- **sql/model/** — 6 dimension tables + fact table (Week 3)
+- **export/parquet/** — star schema exported for Power BI (Week 4)
+- **powerbi/themes/** — custom teal theme eu_energy_architecture.json
+- **docs/** — article-10-mapping.md, quality reports, architecture sketch
+
 ---
 
 ## Quick Start (5 minutes)
 
-```bash
-# 1. Clone
-git clone https://github.com/MichalMrugala/contract-first-warehouse.git
-cd contract-first-warehouse
+Step 1 — Clone the repository:
 
-# 2. Download Eurostat data (SDMX-CSV format)
-# https://ec.europa.eu/eurostat/databrowser/view/nrg_bal_c/default/table?lang=en
-# Place in: raw/nrg_bal_c.csv
+    git clone https://github.com/MichalMrugala/contract-first-warehouse.git
+    cd contract-first-warehouse
 
-# 3. Build the warehouse (DuckDB v1.5.0+ required)
-duckdb warehouse.duckdb
-.read sql/explore/01_exploration.sql
-.read sql/quality/02_quality_checks.sql
-.read sql/staging/06_staging_v2.sql
-.read sql/model/07_dim_country.sql
-# ... etc through 13_fact_energy_balance.sql
+Step 2 — Download Eurostat data (SDMX-CSV format) from:
+https://ec.europa.eu/eurostat/databrowser/view/nrg_bal_c/default/table?lang=en
 
-# 4. Export to Parquet for Power BI
-COPY Fact_EnergyBalance TO 'export/parquet/fact_energy_balance.parquet'
-  (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000);
+Place it in: raw/nrg_bal_c.csv
 
-# 5. Open the Power BI file
-# powerbi/contract_first.pbix
-```
+Step 3 — Build the warehouse (DuckDB v1.5.0+ required):
+
+    duckdb warehouse.duckdb
+    .read sql/explore/01_exploration.sql
+    .read sql/quality/02_quality_checks.sql
+    .read sql/staging/06_staging_v2.sql
+    .read sql/model/07_dim_country.sql
+    .read sql/model/08_dim_energy_product.sql
+    .read sql/model/09_dim_balance_item.sql
+    .read sql/model/10_dim_unit.sql
+    .read sql/model/11_dim_year.sql
+    .read sql/model/12_dim_obs_status.sql
+    .read sql/model/13_fact_energy_balance.sql
+
+Step 4 — Export to Parquet for Power BI:
+
+    COPY Fact_EnergyBalance TO 'export/parquet/fact_energy_balance.parquet'
+      (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000);
+
+Step 5 — Open the Power BI file at powerbi/contract_first.pbix
 
 ---
 
@@ -219,7 +222,7 @@ If this repository saved you research time on Article 10 implementation — plea
 
 ## How to cite
 
-See [`CITATION.cff`](CITATION.cff) for formal citation, or use:
+See [CITATION.cff](CITATION.cff) for formal citation, or use:
 
 > Mrugała, M. (2026). *Contract First: A reference implementation for EU AI Act Article 10 data governance*. GitHub. https://github.com/MichalMrugala/contract-first-warehouse
 
