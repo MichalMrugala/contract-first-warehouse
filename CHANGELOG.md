@@ -1,7 +1,25 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to Contract First are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [1.1.0] — 2026-04-27
+
+### Added
+- `contracts/energy_balance_v0.5_multi_entity.yaml` — joint deployer reference contract extending v0.4 with `deployer_arrangement`, `x_ai_act_article_3_8` (per-entity authority analysis), and `x_ai_act_article_26` (obligation matrix with GDPR Article 26 written-agreement test by analogy)
+- `docs/multi-entity-pattern.md` — full pattern document covering the dilution problem, why single-deployer YAML breaks at scale, the CJEU analogy (C-210/16, C-25/17, C-40/17), the four-block composable pattern, SQL implementation with `role_assignments` and entity-scoped audit ledger, three twelve-month failure modes, when to use the pattern, and limitations
+- `.github/ISSUE_TEMPLATE/multi_entity_correction.md` — issue template for joint-deployer YAML corrections
+- README.md "Multi-Entity Implementation" section with CJEU triology reference and link to pattern doc
+- README.md updated stats table including multi-entity reference row
+- Multi-entity badge in README header
+- `docs/article-10-mapping.md` "Joint Deployer Mapping (Article 3(8) + Article 26)" section
+
+### Changed
+- Regulatory timeline corrected throughout repository: Annex III enforcement 2 December 2027 (extended from 2 August 2026 via Digital Omnibus), Annex I enforcement 2 August 2028
+- README narrative updated from "August 2026 enforcement" framing to staged-enforcement framing with extended runway
+- `docs/article-10-mapping.md` "When this document will be updated" reflects current regulatory state (CEN/CENELEC standards in drafting, EU AI Office implementation acts pending)
+- CITATION.cff version bumped to 1.1.0 with new keywords: multi-entity, joint deployer, Article 3(8), Article 26
+- README "Who is this for" section adds senior architect at group structure as primary audience
 
 ## [1.0.0] — 2026-04-13
 

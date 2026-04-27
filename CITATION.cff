@@ -1,24 +1,29 @@
-﻿cff-version: 1.2.0
+cff-version: 1.2.0
 message: "If you use Contract First in your work, please cite it as below."
-title: "Contract First: A reference implementation for EU AI Act Article 10 data governance"
-abstract: "A governed star schema data warehouse built from 39.5M rows of EU energy data in 8 weekends, with YAML data contracts written before SQL and full mapping to EU AI Act Article 10 sub-clauses."
+title: "Contract First: A reference implementation for EU AI Act Article 10 data governance, including the multi-entity joint deployer pattern"
+abstract: "A governed star schema data warehouse built from 39.5M rows of EU energy data in 8 weekends, with YAML data contracts written before SQL and full mapping to EU AI Act Article 10 sub-clauses. Version 1.1.0 adds the multi-entity joint deployer pattern covering Article 3(8) per-entity authority analysis and Article 26 obligation matrix, with legal grounding in three CJEU joint controllership cases applied by analogy."
 authors:
   - family-names: "Mrugała"
     given-names: "Michał"
-    affiliation: "WSB Merito Wrocław (Law) / ArcelorMittal Distribution Solutions Poland"
 type: software
-version: "1.0.0"
-date-released: 2026-04-13
+version: "1.1.0"
+date-released: 2026-04-27
 url: "https://github.com/MichalMrugala/contract-first-warehouse"
 license: MIT
 keywords:
   - "EU AI Act"
   - "Article 10"
+  - "Article 3(8)"
+  - "Article 26"
   - "data contracts"
   - "data governance"
   - "data warehouse"
+  - "multi-entity"
+  - "joint deployer"
+  - "joint controller"
   - "YAML"
   - "DuckDB"
   - "Power BI"
   - "Eurostat"
   - "build-in-public"
+  - "ODCS"

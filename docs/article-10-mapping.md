@@ -1,18 +1,20 @@
-﻿# EU AI Act Article 10: YAML Data Contract Mapping
+# EU AI Act Article 10: YAML Data Contract Mapping
 
 > The reference document mapping each sub-clause of EU AI Act Article 10 to specific YAML fields in the Contract First data warehouse.
 
 **Last updated:** April 2026
 **Status:** Aligned with Article 10 final text (Regulation (EU) 2024/1689)
-**Caveat:** Will be updated when Digital Omnibus trilogue concludes (April 28, 2026)
+**Companion document:** [docs/multi-entity-pattern.md](multi-entity-pattern.md) covers the joint deployer case (Article 3(8) + Article 26)
 
 ---
 
 ## Why this document exists
 
-EU AI Act Article 10 enforcement begins **August 2, 2026**. The text of the article is 8 sub-clauses long. Most compliance documentation translates these sub-clauses into PDF policy documents. Auditors do not audit PDFs — they audit pipelines.
+EU AI Act enforcement is staged. **Annex III** high-risk systems begin **2 December 2027** (extended from August 2026 via the Digital Omnibus process). **Annex I** high-risk systems begin **2 August 2028**. The text of Article 10 itself is 8 sub-clauses long. Most compliance documentation translates these sub-clauses into PDF policy documents. Auditors do not audit PDFs — they audit pipelines.
 
 This document shows how each sub-clause maps to a specific, testable YAML field. The contract is validated on every pipeline run. The validation results are the audit evidence.
+
+The extended timeline is runway, not relief. Every additional month is one more opportunity for a regulator to find a deployer that has documentation but cannot show enforcement. Build the structure now.
 
 ---
 
@@ -263,6 +265,35 @@ special_categories_handling:
 
 ---
 
+## Joint Deployer Mapping (Article 3(8) + Article 26)
+
+When two or more legal entities share authority over the same AI system, the single-deployer mapping above is necessary but not sufficient. Both entities are deployers under Article 3(8). Both owe the full set of Article 26 obligations. The contract must allocate responsibilities explicitly.
+
+The full pattern is documented in [docs/multi-entity-pattern.md](multi-entity-pattern.md). At a glance:
+
+| Article | Requirement | Multi-Entity YAML field |
+|---|---|---|
+| 3(8) | Per-entity authority analysis (procurement, policy, operational) | `x_ai_act_article_3_8.per_entity_analysis[]` |
+| 26 | Joint deployer obligation matrix with named lead per sub-paragraph | `x_ai_act_article_26.obligation_matrix.*` |
+| 26(1) | Appropriate technical and organisational measures | `obligation_matrix.article_26_1_*` |
+| 26(2) | Human oversight | `obligation_matrix.article_26_2_human_oversight` |
+| 26(3) | Input data relevance monitoring | `obligation_matrix.article_26_3_input_data_relevance` |
+| 26(4) | Operation monitoring | `obligation_matrix.article_26_4_monitoring_operation` |
+| 26(5) | Logging and record-keeping | `obligation_matrix.article_26_5_logging_record_keeping` |
+| 26(6) | Inform workers subject to use | `obligation_matrix.article_26_6_inform_workers` |
+| 26(7) | Data protection impact assessment | `obligation_matrix.article_26_7_data_protection_impact` |
+| 26(8) | Incident reporting | `obligation_matrix.article_26_8_incident_reporting` |
+
+The legal grounding rests on the GDPR Article 26 written-agreement test by analogy, supported by three CJEU cases:
+
+- **C-210/16** (*Wirtschaftsakademie Schleswig-Holstein*, 2018) — decisive influence as the controlling test
+- **C-25/17** (*Jehovah's Witnesses*, 2018) — joint determination of purposes and means
+- **C-40/17** (*Fashion ID*, 2019) — embedded-component scenarios
+
+The reference YAML implementing the full pattern is in [`contracts/energy_balance_v0.5_multi_entity.yaml`](../contracts/energy_balance_v0.5_multi_entity.yaml).
+
+---
+
 ## Limitations of this implementation
 
 This reference implementation does not cover:
@@ -270,7 +301,7 @@ This reference implementation does not cover:
 - **Bias measurement for protected categories not present in source data** (e.g., ethnicity in most EU CRMs). The contract documents this gap explicitly.
 - **Cross-jurisdictional regulatory variation** (UK, Switzerland, US-state-level requirements). Article 10 is EU-only.
 - **Updates published after April 2026.** This mapping reflects the AI Act final text and the ODCS v3.1.0 specification.
-- **Provider-side obligations.** This contract is built from the deployer perspective. Providers have additional obligations under Article 10.
+- **Provider-side obligations.** This contract is built from the deployer perspective. Providers have additional obligations under Article 16.
 
 ---
 
@@ -278,10 +309,11 @@ This reference implementation does not cover:
 
 | Trigger | Expected update |
 |---|---|
-| Digital Omnibus trilogue conclusion (April 28, 2026) | Within 24 hours |
-| Implementation acts published by EU AI Office | Within 1 week |
+| EU AI Office publishes implementation acts | Within 1 week |
+| CEN/CENELEC publishes harmonised standards (currently in drafting) | Within 1 week |
 | Clarifying guidance from EU Commission | Within 1 week |
-| Annex III updates | Within 1 month |
+| Annex III text amendment | Within 1 month |
+| Approach to Annex III enforcement (2 December 2027) | Quarterly review |
 
 ---
 
@@ -290,7 +322,8 @@ This reference implementation does not cover:
 1. **Read the sub-clause** in the actual EU AI Act text (Regulation EU 2024/1689). Do not rely on this summary for legal advice.
 2. **Compare your existing data documentation** to the YAML fields shown.
 3. **For each missing field**, decide whether your AI system is in scope.
-4. **If in scope**, build the field into your data contract before August 2, 2026.
+4. **If in scope and a single deployer**, build the field into your data contract before the relevant enforcement date.
+5. **If in scope and a group structure**, read [docs/multi-entity-pattern.md](multi-entity-pattern.md) and adopt the joint deployer pattern.
 
 This document is not legal advice. Consult a qualified lawyer for AI Act compliance opinions.
 
@@ -298,6 +331,6 @@ This document is not legal advice. Consult a qualified lawyer for AI Act complia
 
 ## Author
 
-Michał Mrugała — law student at WSB Merito Wrocław, data engineering intern at ArcelorMittal.
+Michał Mrugała. Architecture First.
 
-If you need help implementing Article 10 data governance for your team, see the [About section](https://www.linkedin.com/in/michal-mrugala02/) of my LinkedIn profile.
+If you need help implementing Article 10 data governance for your team — single deployer or joint multi-entity — see [architecture-first.beehiiv.com](https://architecture-first.beehiiv.com) or [LinkedIn](https://www.linkedin.com/in/michal-mrugala02/).

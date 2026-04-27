@@ -1,0 +1,402 @@
+dataContractSpecification: 1.1.0
+id: contract-first-energy-multi-entity-v1
+info:
+  title: EU Energy Balance Raw Data — Multi-Entity Joint Deployer Reference
+  version: 0.5.0
+  status: active
+  description: >
+    Extends contracts/energy_balance_v0.4.yaml with the multi-entity
+    joint-deployer pattern. Where v0.4 documents a single-deployer
+    Article 10 mapping, v0.5 demonstrates the contract structure
+    required when an AI system is operated jointly across multiple
+    legal entities (parent and subsidiaries, or regulated and
+    non-regulated business units sharing one platform).
+
+    The multi-entity case is where Article 3(8) "under its authority"
+    gets tested. When a subsidiary operates a shared platform that
+    the parent procured and policied, both have authority — technically
+    and procurally. Single-deployer YAML cannot represent this.
+
+    This contract adds three blocks:
+      - deployer_arrangement: composable joint-deployer pattern
+      - x_ai_act_article_3_8: per-entity authority analysis
+      - x_ai_act_article_26: joint deployer obligation matrix
+        with GDPR Article 26 written-agreement test by analogy
+
+    All v0.4 quality, schema, and lineage content is preserved.
+    The Eurostat dataset itself is not personal data and is not used
+    for AI training — the multi-entity example uses the same source
+    schema for didactic continuity with v0.4.
+
+    Aligned with ODCS v3.1.0 (Bitol / Linux Foundation).
+  owner: Michal Mrugala
+  contact:
+    name: Michal Mrugala
+    url: https://architecture-first.beehiiv.com
+
+servers:
+  local:
+    type: local
+    path: warehouse.duckdb
+    format: duckdb
+
+terms:
+  usage: >
+    Analytics and reporting on EU energy consumption patterns.
+    Educational project — Contract First build-in-public series.
+    Multi-entity reference is illustrative; do not deploy verbatim
+    in production without entity-specific legal review.
+  limitations: >
+    Source data must be attributed to Eurostat.
+    No redistribution without proper attribution.
+    Multi-entity patterns require qualified legal counsel review
+    in production deployments — this contract is reference, not advice.
+  billing: Free (Eurostat open data)
+  noticePeriod: N/A
+
+# ═══════════════════════════════════════════════════════
+# Models — preserved from v0.4
+# ═══════════════════════════════════════════════════════
+
+models:
+  raw_energy:
+    description: >
+      Raw energy balance data as loaded from Eurostat SDMX-CSV export.
+      Schema unchanged from v0.4. See contracts/energy_balance_v0.4.yaml
+      for full field-level documentation.
+    fields:
+      DATAFLOW: { type: string, required: false }
+      LAST_UPDATE: { type: string, required: false }
+      freq: { type: string, required: true, enum: [A] }
+      nrg_bal: { type: string, required: true }
+      siec: { type: string, required: true }
+      unit: { type: string, required: true, enum: [TJ, KTOE, GWH] }
+      geo: { type: string, required: true, minLength: 2, maxLength: 10 }
+      TIME_PERIOD: { type: integer, required: true, minimum: 1990, maximum: 2024 }
+      OBS_VALUE: { type: number, required: false }
+      OBS_FLAG: { type: string, required: false }
+      CONF_STATUS: { type: string, required: false }
+
+# ═══════════════════════════════════════════════════════
+# Quality — preserved from v0.4 (full rule set inherited)
+# ═══════════════════════════════════════════════════════
+
+quality:
+  type: custom-sql
+  inherits_from: contracts/energy_balance_v0.4.yaml
+  staging:
+    tiers:
+      clean: 21268329
+      missing: 18218538
+      rejected: 0
+    total: 39486867
+
+# ═══════════════════════════════════════════════════════
+# Star schema — preserved from v0.4
+# ═══════════════════════════════════════════════════════
+
+star_schema:
+  inherits_from: contracts/energy_balance_v0.4.yaml
+  fact_tables:
+    - name: Fact_EnergyBalance
+      grain: "one measured observation per country, product, balance item, unit, year"
+      row_count: 20709414
+
+# ═══════════════════════════════════════════════════════
+# Multi-Entity Deployer Arrangement (NEW in v0.5)
+#
+# This is the composable pattern that single-deployer YAML cannot
+# represent. One row per entity, one row per joint responsibility,
+# one explicit boundary for hybrid usage.
+#
+# The pattern is illustrative — entity_id values are placeholders
+# and would be replaced with actual legal entity identifiers in a
+# real implementation.
+# ═══════════════════════════════════════════════════════
+
+deployer_arrangement:
+  arrangement_type: "joint"
+  written_agreement_ref: "JDA-2026-001"
+  written_agreement_location: "docs/joint_deployer_agreement.pdf"
+  effective_from: "2026-01-01"
+  next_review_date: "2026-12-31"
+
+  entities:
+    - entity_id: "GROUP_PARENT_DE"
+      legal_name: "[Parent Group GmbH]"
+      jurisdiction: "DE"
+      role: "procuring_deployer"
+      authority_basis: "Article 3(8) — policy authority + procurement contract"
+      systems_under_authority: ["model_governance", "audit_oversight"]
+
+    - entity_id: "SUBSIDIARY_PL"
+      legal_name: "[Subsidiary Sp. z o.o.]"
+      jurisdiction: "PL"
+      role: "operating_deployer"
+      authority_basis: "Article 3(8) — technical operation + day-to-day control"
+      systems_under_authority: ["pipeline_execution", "incident_response"]
+
+    - entity_id: "RETAIL_ARM"
+      legal_name: "[Retail Arm GmbH]"
+      jurisdiction: "DE"
+      role: "non_regulated_consumer"
+      authority_basis: "Out of Article 10 scope — uses platform for non-high-risk purposes only"
+      systems_under_authority: []
+
+  joint_responsibilities:
+    bias_examination:
+      lead: "GROUP_PARENT_DE"
+      reviewer: "SUBSIDIARY_PL"
+      cadence: "quarterly"
+      escalation_to: "GROUP_PARENT_DE"
+
+    data_governance_oversight:
+      lead: "GROUP_PARENT_DE"
+      reviewer: "SUBSIDIARY_PL"
+      cadence: "annual"
+
+    incident_escalation:
+      tier_1_responder: "SUBSIDIARY_PL"
+      tier_2_escalation: "GROUP_PARENT_DE"
+      sla_hours:
+        critical: 4
+        high: 24
+        medium: 72
+      regulator_notification_authority: "GROUP_PARENT_DE"
+
+    audit_response:
+      primary_contact: "GROUP_PARENT_DE"
+      technical_contact: "SUBSIDIARY_PL"
+      record_custodian: "GROUP_PARENT_DE"
+
+  hybrid_usage_boundary:
+    description: >
+      The same platform is used by entities for both regulated
+      (Article 10 in scope) and non-regulated (out of scope) purposes.
+      The boundary itself is a contract field — a regulator asking
+      which subsidiary is in scope receives a single authoritative
+      answer instead of a meeting.
+    regulated_scope:
+      entities: ["SUBSIDIARY_PL"]
+      isolation: "RLS"
+      isolation_implementation: "row-level security on tenant_id column"
+      monitored: true
+    non_regulated_scope:
+      entities: ["RETAIL_ARM"]
+      isolation: "schema"
+      isolation_implementation: "separate database schema, separate role grants"
+      monitored: false
+    boundary_audit:
+      method: "monthly query inspecting cross-schema access logs"
+      sql_file: "sql/quality/16_hybrid_boundary_audit.sql"
+
+# ═══════════════════════════════════════════════════════
+# Article 3(8) — Per-Entity Authority Analysis (NEW in v0.5)
+#
+# Article 3(8) defines a deployer as: "any natural or legal person...
+# using an AI system under its authority." The analysis must be
+# performed per entity. A subsidiary running the platform technically
+# is a deployer. The parent procuring and policing is also a deployer.
+# Both. That is the joint deployer condition.
+# ═══════════════════════════════════════════════════════
+
+x_ai_act_article_3_8:
+  applicable: true
+  per_entity_analysis:
+    - entity_id: "GROUP_PARENT_DE"
+      is_deployer: true
+      authority_dimensions:
+        procurement: "yes — signed master agreement with provider"
+        policy: "yes — sets data governance and risk policies"
+        technical_operation: "no — does not run the pipeline"
+        end_use_decision: "yes — defines permissible use cases"
+      conclusion: >
+        Procuring deployer. Has policy authority and end-use authority
+        but not day-to-day technical control. Joint deployer per
+        Article 3(8) by virtue of policy and procurement.
+
+    - entity_id: "SUBSIDIARY_PL"
+      is_deployer: true
+      authority_dimensions:
+        procurement: "no — operates under parent contract"
+        policy: "partial — implements parent policies, sets local SLAs"
+        technical_operation: "yes — runs pipelines, owns infrastructure"
+        end_use_decision: "partial — within parent-defined permissible uses"
+      conclusion: >
+        Operating deployer. Has technical authority and operational
+        control. Joint deployer per Article 3(8) by virtue of
+        day-to-day technical operation.
+
+    - entity_id: "RETAIL_ARM"
+      is_deployer: false
+      authority_dimensions:
+        procurement: "no"
+        policy: "no"
+        technical_operation: "no"
+        end_use_decision: "scoped to non-high-risk uses only"
+      conclusion: >
+        Not a deployer for Article 10 purposes. Uses the shared platform
+        for non-high-risk purposes. Hybrid boundary keeps this entity
+        out of scope; isolation is enforced at schema level.
+
+# ═══════════════════════════════════════════════════════
+# Article 26 — Joint Deployer Obligation Matrix (NEW in v0.5)
+#
+# The AI Act does not contain a direct mirror of GDPR Article 26.
+# However, Article 26 of the AI Act (Obligations of deployers of
+# high-risk AI systems) applies to each deployer. When two entities
+# are joint deployers under Article 3(8), each owes the full set
+# of Article 26 obligations.
+#
+# GDPR Article 26 ("Joint controllers shall in a transparent manner
+# determine their respective responsibilities") supplies the
+# written-agreement test by analogy. The CJEU built this doctrine
+# across three cases:
+#   - C-210/16 (Wirtschaftsakademie Schleswig-Holstein, 2018):
+#     joint controllership without direct technical access; decisive
+#     influence as the controlling test.
+#   - C-25/17 (Jehovah's Witnesses / Tietosuojavaltuutettu, 2018):
+#     joint determination of purposes and means even when one party
+#     never touches the data.
+#   - C-40/17 (Fashion ID, 2019): doctrine extends to embedded-
+#     component scenarios where one party enables another's processing.
+#
+# The principle survives translation: authority plus decision rights
+# equals joint deployer status under AI Act Article 26. In the
+# joint-deployer arrangement, each entity carries its allocated
+# responsibilities, but joint accountability is preserved.
+# ═══════════════════════════════════════════════════════
+
+x_ai_act_article_26:
+  applicable: true
+  joint_deployer: true
+  written_agreement_required: true
+  written_agreement_ref: "JDA-2026-001"
+
+  legal_anchor:
+    primary: "AI Act Article 26 (Obligations of deployers of high-risk AI systems)"
+    primary_text_reference: "Regulation (EU) 2024/1689, Article 26"
+    analogy_basis: "GDPR Article 26 (Joint controllers) — written-agreement test"
+    cjeu_reference_cases:
+      - case: "C-210/16"
+        name: "Wirtschaftsakademie Schleswig-Holstein"
+        year: 2018
+        established: "decisive influence as the controlling test for joint controllership"
+        relevance: "establishes that joint status exists without direct technical access"
+      - case: "C-25/17"
+        name: "Jehovah's Witnesses (Tietosuojavaltuutettu)"
+        year: 2018
+        established: "joint determination of purposes and means even when one party never touches the data"
+        relevance: "applies when parent entity sets purposes but does not handle data directly"
+      - case: "C-40/17"
+        name: "Fashion ID"
+        year: 2019
+        established: "doctrine extends to embedded-component scenarios"
+        relevance: "applies when one entity enables another's processing on a shared platform"
+
+  obligation_matrix:
+    article_26_1_appropriate_technical_organisational_measures:
+      lead: "SUBSIDIARY_PL"
+      shared: ["GROUP_PARENT_DE"]
+      evidence: "deployer_arrangement.joint_responsibilities.data_governance_oversight"
+
+    article_26_2_human_oversight:
+      lead: "SUBSIDIARY_PL"
+      shared: ["GROUP_PARENT_DE"]
+      evidence: "sql/model — role_assignments table maps oversight role to current person"
+
+    article_26_3_input_data_relevance:
+      lead: "SUBSIDIARY_PL"
+      shared: ["GROUP_PARENT_DE"]
+      evidence: "contracts/energy_balance_v0.4.yaml — relevance_assessment block"
+
+    article_26_4_monitoring_operation:
+      lead: "SUBSIDIARY_PL"
+      shared: ["GROUP_PARENT_DE"]
+      evidence: "sql/quality/15_star_schema_tests.sql + audit ledger"
+
+    article_26_5_logging_record_keeping:
+      lead: "SUBSIDIARY_PL"
+      shared: ["GROUP_PARENT_DE"]
+      evidence: "Article 10 audit ledger — append-only by database role"
+
+    article_26_6_inform_workers:
+      lead: "GROUP_PARENT_DE"
+      shared: []
+      evidence: "out of contract scope — managed via HR policy"
+
+    article_26_7_data_protection_impact:
+      lead: "GROUP_PARENT_DE"
+      shared: ["SUBSIDIARY_PL"]
+      evidence: "out of contract scope — separate DPIA artifact"
+
+    article_26_8_incident_reporting:
+      lead: "GROUP_PARENT_DE"
+      shared: ["SUBSIDIARY_PL"]
+      evidence: "deployer_arrangement.joint_responsibilities.incident_escalation"
+
+# ═══════════════════════════════════════════════════════
+# Failure modes — preserved from v0.4 with multi-entity additions
+# ═══════════════════════════════════════════════════════
+
+x_failure_modes_twelve_month:
+  - mode: "ledger_becomes_write_only"
+    description: "Pipelines append; no one reads. Audit log silently rots."
+    prevention: "Quarterly review query embedded in contract with hard next_review_date. Missed review fires its own ledger entry: review_skipped. The contract breaches itself, audibly."
+
+  - mode: "schema_drift_uncovered"
+    description: "New AI use case ships without contract update."
+    prevention: "BEFORE INSERT trigger checks article_10_registered_systems table. Unregistered system_id raises an exception. Pipeline cannot write until registration is explicit."
+
+  - mode: "cross_entity_escalation_decay"
+    description: "Joint committee stops meeting. Tier-2 acks stop. Original signers leave. Accountability evaporates."
+    prevention: >
+      Accountability held by responsible_role, never by personal email.
+      role_assignments table maps role to current person with
+      effective_from / effective_to columns. People change; the
+      contract does not. This is the multi-entity-specific failure
+      mode — it does not exist in single-deployer arrangements.
+
+# ═══════════════════════════════════════════════════════
+# Lineage — preserved from v0.4 (full pipeline documentation inherited)
+# ═══════════════════════════════════════════════════════
+
+x_data_lineage:
+  inherits_from: contracts/energy_balance_v0.4.yaml
+  pipeline_name: "Contract First Energy Warehouse — Multi-Entity Reference"
+
+# ═══════════════════════════════════════════════════════
+# Legal basis — preserved from v0.4
+# ═══════════════════════════════════════════════════════
+
+x_legal_basis:
+  gdpr_applicable: false
+  reason: No personal data processed.
+  license: CC BY 4.0 Eurostat
+  ai_act_applicable: demonstration
+  ai_act_article_3_8_mapped: true
+  ai_act_article_10_mapped: true
+  ai_act_article_26_mapped: true
+  enforcement_dates:
+    annex_i: "2028-08-02"
+    annex_iii: "2027-12-02"
+  note: >
+    Annex III enforcement was extended from 2 August 2026 to
+    2 December 2027 via the Digital Omnibus process. CEN/CENELEC
+    standards remain in drafting (missed 2025 deadline). This
+    extends the runway for compliance work but does not remove
+    the obligation. Verify weekly via EDPB and IAPP sources.
+
+# ═══════════════════════════════════════════════════════
+# Links
+# ═══════════════════════════════════════════════════════
+
+links:
+  source_dataset: https://ec.europa.eu/eurostat/databrowser/view/nrg_bal_c/default/table?lang=en
+  ai_act_text: https://eur-lex.europa.eu/eli/reg/2024/1689
+  cjeu_c_210_16: https://curia.europa.eu/juris/liste.jsf?num=C-210/16
+  cjeu_c_25_17: https://curia.europa.eu/juris/liste.jsf?num=C-25/17
+  cjeu_c_40_17: https://curia.europa.eu/juris/liste.jsf?num=C-40/17
+  odcs_standard: https://bitol-io.github.io/open-data-contract-standard/
+  github_repo: https://github.com/MichalMrugala/contract-first-warehouse
+  multi_entity_pattern_doc: docs/multi-entity-pattern.md
